@@ -1,0 +1,59 @@
+---
+title: "Seurat Label Transfer"
+author: 
+ - Richard_Green
+ - Lucas Graybuck
+date: "`r format(Sys.time(), '%Y-%m-%d')`"
+output:
+  html_document:
+    df_print: paged
+    self_contained: true
+params:
+  in_file: system.file("testdata/awk_pipeline_counts_table.csv.gz", package = "HTOparser")
+  out_h5: tempfile(fileext = ".h5")
+  out_tbl: tempfile(fileext = ".csv")
+---
+
+```{r Load Libraries}
+library(Seurat)
+library(SeuratLabeler)
+library(ggplot2)
+```
+
+Load Reference Dataset
+```{r Load Reference}
+reference_so <- variable_pbmc_10k_v3
+```
+
+Load Query Dataset
+```{r Load Query}
+query_data <- Read10X_h5(filename = params$in_file)
+query_so <- CreateSeuratObject(counts = query_data)
+```
+
+Normalize Query Dataset
+```{r Normalize Query}
+query_so <- NormalizeData(object = query_so)
+```
+
+Find Anchors
+```{r Find Transfer Anchors}
+transfer_anchors <- FindTransferAnchors(reference = reference_so,
+                                        query = query_so,
+                                        features = VariableFeatures(object = reference_so),
+                                        reduction = "cca")
+```
+
+Transfer labels
+```{r Label Transfer}
+label_predictions <- TransferData(anchorset = transfer_anchors,
+                                  refdata = reference_so$celltype)
+query_so <- AddMetaData(object = query_so,
+                        metadata = label_predictions)
+```
+
+To Do: Add outputs
+
+```{r Session Info}
+sessionInfo()
+```
