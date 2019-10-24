@@ -9,7 +9,7 @@ output:
     df_print: paged
     self_contained: true
 params:
-  in_file: system.file("testdata/awk_pipeline_counts_table.csv.gz", package = "HTOparser")
+  in_file: system.file("testdata/pbmc_1k_v3_filtered_feature_bc_matrix.h5", package = "SeuratLabeler")
   out_h5: tempfile(fileext = ".h5")
   out_tbl: tempfile(fileext = ".csv")
 ---
@@ -20,24 +20,33 @@ library(SeuratLabeler)
 library(ggplot2)
 ```
 
+Declare start
+```{r Declare start}
+stm("Starting Seurat PBMC Label Transfer")
+```
+
 Load Reference Dataset
 ```{r Load Reference}
+stm("Loading Reference from SeuratLabeler package")
 reference_so <- variable_pbmc_10k_v3
 ```
 
 Load Query Dataset
 ```{r Load Query}
+stm(paste("Loading query from", params$in_file))
 query_data <- Read10X_h5(filename = params$in_file)
 query_so <- CreateSeuratObject(counts = query_data)
 ```
 
 Normalize Query Dataset
 ```{r Normalize Query}
+stm("Normalizing query dataset")
 query_so <- NormalizeData(object = query_so)
 ```
 
 Find Anchors
 ```{r Find Transfer Anchors}
+stm("Finding Transfer Anchors")
 transfer_anchors <- FindTransferAnchors(reference = reference_so,
                                         query = query_so,
                                         features = VariableFeatures(object = reference_so),
@@ -46,13 +55,13 @@ transfer_anchors <- FindTransferAnchors(reference = reference_so,
 
 Transfer labels
 ```{r Label Transfer}
+stm("Transfering labels")
 label_predictions <- TransferData(anchorset = transfer_anchors,
                                   refdata = reference_so$celltype)
 query_so <- AddMetaData(object = query_so,
                         metadata = label_predictions)
 ```
 
-To Do: Add outputs
 
 ```{r Session Info}
 sessionInfo()
