@@ -9,15 +9,18 @@ output:
     df_print: paged
     self_contained: true
 params:
-  in_file: system.file("testdata/pbmc_1k_v3_filtered_feature_bc_matrix.h5", package = "SeuratLabeler")
+  in_file: NULL
   out_h5: tempfile(fileext = ".h5")
   out_tbl: tempfile(fileext = ".csv")
 ---
 
 ```{r Load Libraries}
-library(Seurat)
-library(SeuratLabeler)
-library(ggplot2)
+quiet_library <- function(...) {
+  suppressPackageStartupMessages(library(...))
+}
+quiet_library(Seurat)
+quiet_library(SeuratLabeler)
+quiet_library(ggplot2)
 ```
 
 Declare start
@@ -33,6 +36,10 @@ reference_so <- variable_pbmc_10k_v3
 
 Load Query Dataset
 ```{r Load Query}
+if(is.null(params$in_file)) {
+  params$in_file <- system.file("testdata/pbmc_1k_v3_filtered_feature_bc_matrix.h5", 
+                                package = "SeuratLabeler")
+}
 stm(paste("Loading query from", params$in_file))
 query_data <- Read10X_h5(filename = params$in_file)
 query_so <- CreateSeuratObject(counts = query_data)
