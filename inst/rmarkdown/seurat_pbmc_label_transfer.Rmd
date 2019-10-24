@@ -1,7 +1,7 @@
 ---
 title: "Seurat Label Transfer"
 author: 
- - Richard_Green
+ - Richard Green
  - Lucas Graybuck
 date: "`r format(Sys.time(), '%Y-%m-%d')`"
 output:
@@ -10,8 +10,8 @@ output:
     self_contained: true
 params:
   in_file: NULL
-  out_h5: tempfile(fileext = ".h5")
-  out_tbl: tempfile(fileext = ".csv")
+  out_h5: NULL
+  out_tbl: NULL
 ---
 
 ```{r Load Libraries}
@@ -23,10 +23,38 @@ quiet_library(SeuratLabeler)
 quiet_library(ggplot2)
 ```
 
-Declare start
+Declaring start
 ```{r Declare start}
 stm("Starting Seurat PBMC Label Transfer")
 ```
+
+Argument parsing
+```{r Parse arguments}
+if(is.null(params$in_file)) {
+  in_file <- system.file("testdata/pbmc_1k_v3.h5", 
+                         package = "SeuratLabeler")
+  out_h5 <- tempfile(fileext = ".h5")
+  out_tbl <- tempfile(fileext = ".csv.gz")
+
+} else {
+  in_file <- params$in_file
+  out_h5 <- params$out_h5
+  out_tbl <- params$out_tbl
+}
+
+stm(paste0("IN  H5 file         : ", in_file))
+stm(paste0("OUT H5 file         : ", out_h5))
+stm(paste0("OUT Cell Label Table: ", out_tbl))
+```
+
+```{r Print Arguments}
+print(c(
+  paste0("IN  H5 file         : ", in_file),
+  paste0("OUT H5 file         : ", out_h5),
+  paste0("OUT Cell Label Table: ", out_tbl)
+))
+```
+
 
 Load Reference Dataset
 ```{r Load Reference}
@@ -36,12 +64,9 @@ reference_so <- variable_pbmc_10k_v3
 
 Load Query Dataset
 ```{r Load Query}
-if(is.null(params$in_file)) {
-  params$in_file <- system.file("testdata/pbmc_1k_v3_filtered_feature_bc_matrix.h5", 
-                                package = "SeuratLabeler")
-}
-stm(paste("Loading query from", params$in_file))
-query_data <- Read10X_h5(filename = params$in_file)
+
+stm(paste("Loading query from", in_file))
+query_data <- Read10X_h5(filename = in_file)
 query_so <- CreateSeuratObject(counts = query_data)
 ```
 
@@ -56,8 +81,9 @@ Find Anchors
 stm("Finding Transfer Anchors")
 transfer_anchors <- FindTransferAnchors(reference = reference_so,
                                         query = query_so,
+                                        normalization.method = "LogNormalize",
                                         features = VariableFeatures(object = reference_so),
-                                        reduction = "cca")
+                                        reduction = "pcaproject")
 ```
 
 Transfer labels
@@ -67,6 +93,33 @@ label_predictions <- TransferData(anchorset = transfer_anchors,
                                   refdata = reference_so$celltype)
 query_so <- AddMetaData(object = query_so,
                         metadata = label_predictions)
+```
+
+Print summary table
+```{r Type Counts}
+label_summary <- as.data.frame(table(query_so$predicted.id))
+names(label_summary) <- c("type_label","n_cells")
+label_summary$frac_cells <- label_summary$n_cells / sum(label_summary$n_cells)
+
+knitr::kable(label_summary, caption = "Type Label Summary")
+```
+Plot score distribution
+```{r Score Distribution}
+hist(query_so$prediction.score.max,
+     breaks = 50,
+     xlim = c(0,1))
+```
+
+
+Write output table:
+```{r Output Table}
+stm(paste0("Writing results table to ",out_tbl))
+label_results <- data.frame(cell_barcode = names(query_so$predicted.id),
+                          seurat_pbmc_type = query_so$predicted.id,
+                          seurat_pbmc_type_score = query_so$prediction.score.max)
+write.csv(label_results,
+          file = out_tbl,
+          row.names = FALSE)
 ```
 
 
