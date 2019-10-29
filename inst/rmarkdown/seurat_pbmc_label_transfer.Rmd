@@ -71,7 +71,8 @@ reference_so <- variable_pbmc_10k_v3
 Load Query Dataset
 ```{r Load Query}
 stm(paste("Loading query from", in_file))
-query_data <- read_h5_dgCMatrix(in_file)
+query_data <- read_h5_dgCMatrix(in_file,
+                                feature_names = "name")
 query_so <- CreateSeuratObject(counts = query_data)
 ```
 
