@@ -15,12 +15,18 @@ params:
 ---
 
 ```{r Load Libraries}
+start_time <- Sys.time()
+
 quiet_library <- function(...) {
   suppressPackageStartupMessages(library(...))
 }
 quiet_library(Seurat)
 quiet_library(SeuratLabeler)
+quiet_library(H5weaver)
 quiet_library(ggplot2)
+quiet_library(uwot)
+
+options(stringsAsFactors = FALSE)
 ```
 
 Declaring start
@@ -64,9 +70,8 @@ reference_so <- variable_pbmc_10k_v3
 
 Load Query Dataset
 ```{r Load Query}
-
 stm(paste("Loading query from", in_file))
-query_data <- Read10X_h5(filename = in_file)
+query_data <- read_h5_dgCMatrix(in_file)
 query_so <- CreateSeuratObject(counts = query_data)
 ```
 
@@ -110,19 +115,101 @@ hist(query_so$prediction.score.max,
      xlim = c(0,1))
 ```
 
+Run UMAP
+```{r Run UMAP}
+stm("Running UMAP projection")
+umap_results <- uwot::umap(as.matrix(Matrix::t(query_so@assays$RNA@data[VariableFeatures(reference_so),])),
+                           pca = 50,
+                           min_dist = 0.1)
+```
+
+Extract results from Seurat object and remove objects from memory:
+```{r Extract labels}
+stm("Extracting labeling results")
+label_results <- data.frame(cell_barcode = names(query_so$predicted.id),
+                            seurat_pbmc_type = as.character(query_so$predicted.id),
+                            seurat_pbmc_type_score = query_so$prediction.score.max)
+rm(query_so)
+rm(reference_so)
+```
 
 Write output table:
 ```{r Output Table}
 stm(paste0("Writing results table to ",out_tbl))
-label_results <- data.frame(cell_barcode = names(query_so$predicted.id),
-                          seurat_pbmc_type = query_so$predicted.id,
-                          seurat_pbmc_type_score = query_so$prediction.score.max)
+
 write.csv(label_results,
           file = out_tbl,
           row.names = FALSE)
 ```
 
+Plot clusters on UMAP
+```{r Plot UMAP Clusters}
+plot_df <- as.data.frame(umap_results)
+names(plot_df) <- c("umap1","umap2")
+
+plot_df <- cbind(label_results, plot_df) 
+
+plot_colors <- data.frame(seurat_pbmc_type = unique(plot_df$seurat_pbmc_type))
+plot_colors$seurat_pbmc_type_color <- pals::alphabet(n = nrow(plot_colors))
+
+ggplot() +
+  geom_point(data = plot_df,
+             aes(x = umap1,
+                 y = umap2,
+                 color = seurat_pbmc_type)) +
+  scale_color_manual(breaks = plot_colors$seurat_pbmc_type,
+                     values = plot_colors$seurat_pbmc_type_color)
+```
+
+Plot scores on UMAP
+```{r Plot UMAP Scores}
+ggplot() +
+  geom_point(data = plot_df,
+             aes(x = umap1,
+                 y = umap2,
+                 color = seurat_pbmc_type_score)) +
+  scale_color_viridis_c()
+```
+
+Add values to HDF5 List.
+
+Labeling results are stored in "/matrix/observations/"
+UMAP results are stored in "/umap/"
+```{r Add results to list object}
+stm("Adding results to input data")
+
+h5_list <- rhdf5::h5dump(in_file)
+
+if(!"observations" %in% names(h5_list$matrix)) {
+  h5_list$matrix$observations <- list()
+}
+
+h5_list$matrix$observations$seurat_pbmc_type <- label_results$seurat_pbmc_type[match(h5_list$matrix$barcodes, label_results$cell_barcode)]
+h5_list$matrix$observations$seurat_pbmc_type_score <- label_results$seurat_pbmc_type_score[match(h5_list$matrix$barcodes, label_results$cell_barcode)]
+h5_list$umap <- list(umap_1 = plot_df$umap1[match(h5_list$matrix$barcodes, plot_df$cell_barcode)],
+                     umap_2 = plot_df$umap2[match(h5_list$matrix$barcodes, plot_df$cell_barcode)])
+```
+
+Write labeled HDF5 file:
+```{r Write HDF5 file}
+stm(paste0("Writing h5 results to", out_h5))
+write_h5_list(h5_list,
+              out_h5)
+```
+
 
 ```{r Session Info}
 sessionInfo()
+```
+
+Total time ellapsed
+```{r Show Time}
+end_time <- Sys.time()
+diff_time <- end_time - start_time
+time_message <- paste0("Ellapsed Time: ", 
+                       round(diff_time, 3),
+                       " ", units(diff_time))
+print(time_message)
+stm(time_message)
+stm("HTO count processing complete.")
 ```
