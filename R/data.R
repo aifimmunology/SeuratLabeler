@@ -1,8 +1,8 @@
 #' Seurat reference 10X PBMC dataset
 #'
-#' This dataset was retrieved from 10x Genomics here: http://cf.10xgenomics.com/samples/cell-exp/3.0.0/pbmc_10k_v3/pbmc_10k_v3_filtered_feature_bc_matrix.h5
+#' This dataset was retrieved from the Seurat website from this URL: https://www.dropbox.com/s/3f3p5nxrn5b3y4y/pbmc_10k_v3.rds?dl=1
 #'
-#' It was loaded as a Seurat object, normalized with default settings, and 5,000 variable features were selected.
+#' It was loaded and 5,000 variable features were selected.
 #'
 #' The data was then filtered to retain only these variable features for portability.
 #'

@@ -1,0 +1,270 @@
+---
+title: "Seurat Label Transfer"
+author: 
+ - Richard Green
+ - Lucas Graybuck
+date: "`r format(Sys.time(), '%Y-%m-%d')`"
+output:
+  html_document:
+    df_print: paged
+    self_contained: true
+params:
+  in_file: NULL
+  out_h5: NULL
+  out_tbl: NULL
+---
+
+```{r Load Libraries}
+start_time <- Sys.time()
+
+quiet_library <- function(...) {
+  suppressPackageStartupMessages(library(...))
+}
+quiet_library(Seurat)
+quiet_library(SeuratLabeler)
+quiet_library(H5weaver)
+quiet_library(ggplot2)
+quiet_library(uwot)
+
+options(stringsAsFactors = FALSE)
+```
+
+Declaring start
+```{r Declare start}
+stm("Starting Seurat PBMC Label Transfer")
+```
+
+Argument parsing
+```{r Parse arguments}
+if(is.null(params$in_file)) {
+  in_file <- system.file("testdata/pbmc_1k_v3.h5", 
+                         package = "SeuratLabeler")
+  out_h5 <- tempfile(fileext = ".h5")
+  out_tbl <- tempfile(fileext = ".csv.gz")
+
+} else {
+  in_file <- params$in_file
+  out_h5 <- params$out_h5
+  out_tbl <- params$out_tbl
+}
+
+stm(paste0("IN  H5 file         : ", in_file))
+stm(paste0("OUT H5 file         : ", out_h5))
+stm(paste0("OUT Cell Label Table: ", out_tbl))
+```
+
+```{r Print Arguments}
+print(c(
+  paste0("IN  H5 file         : ", in_file),
+  paste0("OUT H5 file         : ", out_h5),
+  paste0("OUT Cell Label Table: ", out_tbl)
+))
+```
+
+
+Load Reference Dataset
+```{r Load Reference}
+stm("Loading Reference from SeuratLabeler package")
+reference_so <- variable_pbmc_10k_v3
+```
+
+Load Query Dataset
+```{r Load Query}
+stm(paste("Loading query from", in_file))
+query_data <- read_h5_dgCMatrix(in_file,
+                                feature_names = "name")
+query_so <- CreateSeuratObject(counts = query_data)
+```
+
+Normalize Query Dataset
+```{r Normalize Query}
+stm("Normalizing query dataset")
+query_so <- NormalizeData(object = query_so)
+```
+
+Find Anchors
+```{r Find Transfer Anchors}
+stm("Finding Transfer Anchors")
+transfer_anchors <- FindTransferAnchors(reference = reference_so,
+                                        query = query_so,
+                                        normalization.method = "LogNormalize",
+                                        features = VariableFeatures(object = reference_so),
+                                        reduction = "pcaproject")
+```
+
+Transfer labels
+```{r Label Transfer}
+stm("Transfering labels")
+label_predictions <- TransferData(anchorset = transfer_anchors,
+                                  refdata = reference_so$celltype)
+query_so <- AddMetaData(object = query_so,
+                        metadata = label_predictions)
+```
+
+Print summary table
+```{r Type Counts}
+label_summary <- as.data.frame(table(query_so$predicted.id))
+names(label_summary) <- c("type_label","n_cells")
+label_summary$frac_cells <- label_summary$n_cells / sum(label_summary$n_cells)
+
+knitr::kable(label_summary, caption = "Type Label Summary")
+```
+Plot score distribution
+```{r Score Distribution}
+hist(query_so$prediction.score.max,
+     breaks = 50,
+     xlim = c(0,1))
+```
+
+Extract results and plot N Genes vs Scores
+```{r Extract Results}
+stm("Extracting labeling results")
+label_results <- data.frame(cell_barcode = names(query_so$predicted.id),
+                            seurat_pbmc_type = as.character(query_so$predicted.id),
+                            seurat_pbmc_type_score = query_so$prediction.score.max,
+                            n_genes = query_so$nFeature_RNA)
+```
+
+Write output table:
+```{r Output Table}
+stm(paste0("Writing results table to ",out_tbl))
+
+write.csv(label_results,
+          file = out_tbl,
+          row.names = FALSE)
+```
+
+Plot genes vs scores
+```{r Plot Genes vs Scores}
+plot_df <- label_results
+
+plot_colors <- data.frame(seurat_pbmc_type = unique(plot_df$seurat_pbmc_type))
+plot_colors$seurat_pbmc_type_color <- pals::alphabet(n = nrow(plot_colors))
+
+ggplot() +
+  geom_point(data = plot_df,
+             aes(x = seurat_pbmc_type_score,
+                 y = n_genes,
+                 color = seurat_pbmc_type)) +
+  scale_color_manual(breaks = plot_colors$seurat_pbmc_type,
+                     values = plot_colors$seurat_pbmc_type_color) +
+  scale_y_log10(breaks = c(10, 100, 500, 1000, 1500, 2000, 3000))
+```
+
+Run PCA
+```{r Run PCA}
+stm("Running PCA and Jack Straw")
+
+query_so <- FindVariableFeatures(object = query_so)
+query_so <- ScaleData(object = query_so)
+query_so <- RunPCA(object = query_so, npcs = 50)
+
+query_so <- JackStraw(object = query_so, dims = 50)
+query_so <- ScoreJackStraw(object = query_so, dims = 1:50)
+
+pc_pvals <- query_so@reductions$pca@jackstraw$overall.p.values[,2]
+good_pcs <- pc_pvals < 0.05
+
+pc_embeddings <- query_so@reductions$pca@cell.embeddings
+```
+
+Run UMAP
+```{r Run UMAP}
+stm("Running UMAP projection")
+
+umap_results <- uwot::umap(pc_embeddings[, good_pcs],
+                           min_dist = 0.1)
+```
+
+Remove objects from memory:
+```{r Remove Seurat Objects}
+stm("Dropping Seurat Objects from memory")
+rm(query_so)
+rm(reference_so)
+```
+
+Plot clusters on UMAP
+```{r Plot UMAP Clusters}
+umap_df <- as.data.frame(umap_results)
+names(umap_df) <- c("umap1","umap2")
+
+plot_df <- cbind(plot_df, umap_df) 
+
+ggplot() +
+  geom_point(data = plot_df,
+             aes(x = umap1,
+                 y = umap2,
+                 color = seurat_pbmc_type)) +
+  scale_color_manual(breaks = plot_colors$seurat_pbmc_type,
+                     values = plot_colors$seurat_pbmc_type_color)
+```
+
+Plot scores on UMAP
+```{r Plot UMAP Scores}
+ggplot() +
+  geom_point(data = plot_df,
+             aes(x = umap1,
+                 y = umap2,
+                 color = seurat_pbmc_type_score)) +
+  scale_color_viridis_c()
+```
+
+Plot N Features on UMAP
+```{r Plot UMAP N features}
+ggplot() +
+  geom_point(data = plot_df,
+             aes(x = umap1,
+                 y = umap2,
+                 color = n_genes)) +
+  scale_color_viridis_c()
+```
+
+Add values to HDF5 List.
+
+Labeling results are stored in "/matrix/observations/"  
+UMAP results are stored in "/umap/"  
+PCA results are stored in "/pca/"
+
+```{r Add results to list object}
+stm("Adding results to input data")
+
+h5_list <- rhdf5::h5dump(in_file)
+
+if(!"observations" %in% names(h5_list$matrix)) {
+  h5_list$matrix$observations <- list()
+}
+
+h5_list$matrix$observations$seurat_pbmc_type <- label_results$seurat_pbmc_type[match(h5_list$matrix$barcodes, label_results$cell_barcode)]
+h5_list$matrix$observations$seurat_pbmc_type_score <- label_results$seurat_pbmc_type_score[match(h5_list$matrix$barcodes, label_results$cell_barcode)]
+
+h5_list$umap <- list(umap_1 = plot_df$umap1[match(h5_list$matrix$barcodes, plot_df$cell_barcode)],
+                     umap_2 = plot_df$umap2[match(h5_list$matrix$barcodes, plot_df$cell_barcode)])
+
+h5_list$pca_dgCMatrix <- as(t(pc_embeddings), "dgCMatrix")
+h5_list <- h5_list_convert_from_dgCMatrix(h5_list, target = "pca")
+h5_list$pca$features$jackstraw_pvalue <- pc_pvals
+```
+
+Write labeled HDF5 file:
+```{r Write HDF5 file}
+stm(paste0("Writing h5 results to", out_h5))
+write_h5_list(h5_list,
+              out_h5)
+```
+
+
+```{r Session Info}
+sessionInfo()
+```
+
+Total time ellapsed
+```{r Show Time}
+end_time <- Sys.time()
+diff_time <- end_time - start_time
+time_message <- paste0("Ellapsed Time: ", 
+                       round(diff_time, 3),
+                       " ", units(diff_time))
+print(time_message)
+stm(time_message)
+stm("HTO count processing complete.")
+```
