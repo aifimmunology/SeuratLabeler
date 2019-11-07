@@ -155,14 +155,39 @@ Run PCA
 ```{r Run PCA}
 stm("Running PCA and Jack Straw")
 
+sample_cells <- function(cl, 
+                          sample.size, 
+                          seed = 3030) {
+  cl.cells <- split(names(cl), cl)
+  sampled.cells <- sapply(names(cl.cells), function(x) {
+    cells <- cl.cells[[x]]
+    if (sample.size >= length(cells)) {
+      return(cells)
+    }
+    to.sample <- pmin(sample.size, length(cells))
+    
+    set.seed(seed)
+    sample(cells, to.sample)
+  }, simplify = FALSE)
+  sampled.cells <- unlist(sampled.cells)
+  return(sampled.cells)
+}
+
 query_so <- FindVariableFeatures(object = query_so)
 query_so <- ScaleData(object = query_so)
 query_so <- RunPCA(object = query_so, npcs = 50)
 
-query_so <- JackStraw(object = query_so, dims = 50)
-query_so <- ScoreJackStraw(object = query_so, dims = 1:50)
+jackstraw_cells <- sample_cells(query_so$predicted.id, 100)
+jackstraw_so <- query_so[,jackstraw_cells]
 
-pc_pvals <- query_so@reductions$pca@jackstraw$overall.p.values[,2]
+jackstraw_so <- JackStraw(object = jackstraw_so, 
+                          dims = 50, 
+                          num.replicate = 50, 
+                          verbose = FALSE)
+jackstraw_so <- ScoreJackStraw(object = jackstraw_so, 
+                               dims = 1:50)
+
+pc_pvals <- jackstraw_so@reductions$pca@jackstraw$overall.p.values[,2]
 good_pcs <- pc_pvals < 0.05
 
 pc_embeddings <- query_so@reductions$pca@cell.embeddings
