@@ -9,7 +9,7 @@ output:
     df_print: paged
     self_contained: true
 params:
-  in_file: NULL
+  in_h5: NULL
   out_h5: NULL
   out_tbl: NULL
 ---
@@ -36,26 +36,26 @@ stm("Starting Seurat PBMC Label Transfer")
 
 Argument parsing
 ```{r Parse arguments}
-if(is.null(params$in_file)) {
-  in_file <- system.file("testdata/pbmc_1k_v3.h5", 
+if(is.null(params$in_h5)) {
+  in_h5 <- system.file("testdata/pbmc_1k_v3.h5", 
                          package = "SeuratLabeler")
   out_h5 <- tempfile(fileext = ".h5")
   out_tbl <- tempfile(fileext = ".csv.gz")
 
 } else {
-  in_file <- params$in_file
+  in_h5 <- params$in_h5
   out_h5 <- params$out_h5
   out_tbl <- params$out_tbl
 }
 
-stm(paste0("IN  H5 file         : ", in_file))
+stm(paste0("IN  H5 file         : ", in_h5))
 stm(paste0("OUT H5 file         : ", out_h5))
 stm(paste0("OUT Cell Label Table: ", out_tbl))
 ```
 
 ```{r Print Arguments}
 print(c(
-  paste0("IN  H5 file         : ", in_file),
+  paste0("IN  H5 file         : ", in_h5),
   paste0("OUT H5 file         : ", out_h5),
   paste0("OUT Cell Label Table: ", out_tbl)
 ))
@@ -70,8 +70,8 @@ reference_so <- variable_pbmc_10k_v3
 
 Load Query Dataset
 ```{r Load Query}
-stm(paste("Loading query from", in_file))
-query_data <- read_h5_dgCMatrix(in_file,
+stm(paste("Loading query from", in_h5))
+query_data <- read_h5_dgCMatrix(in_h5,
                                 feature_names = "name")
 query_so <- CreateSeuratObject(counts = query_data)
 ```
@@ -228,7 +228,7 @@ PCA results are stored in "/pca/"
 ```{r Add results to list object}
 stm("Adding results to input data")
 
-h5_list <- rhdf5::h5dump(in_file)
+h5_list <- rhdf5::h5dump(in_h5)
 
 if(!"observations" %in% names(h5_list$matrix)) {
   h5_list$matrix$observations <- list()
