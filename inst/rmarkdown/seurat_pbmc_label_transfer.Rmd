@@ -26,6 +26,8 @@ quiet_library(H5weaver)
 quiet_library(ggplot2)
 quiet_library(uwot)
 
+pals.alphabet.colors <- c("#F0A0FF","#0075DC","#993F00","#4C005C","#191919","#005C31","#2BCE48","#FFCC99","#808080","#94FFB5","#8F7C00","#9DCC00","#C20088","#003380","#FFA405","#FFA8BB","#426600","#FF0010","#5EF1F2","#00998F","#E0FF66","#740AFF","#990000","#FFFF80","#FFE100","#FF5005")
+
 options(stringsAsFactors = FALSE)
 ```
 
@@ -139,7 +141,7 @@ Plot genes vs scores
 plot_df <- label_results
 
 plot_colors <- data.frame(seurat_pbmc_type = unique(plot_df$seurat_pbmc_type))
-plot_colors$seurat_pbmc_type_color <- pals::alphabet(n = nrow(plot_colors))
+plot_colors$seurat_pbmc_type_color <- pals.alphabet.colors[1:nrow(plot_colors)]
 
 ggplot() +
   geom_point(data = plot_df,
