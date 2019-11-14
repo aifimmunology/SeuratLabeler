@@ -9,7 +9,7 @@ output:
     df_print: paged
     self_contained: true
 params:
-  in_file: NULL
+  in_h5: NULL
   out_h5: NULL
   out_tbl: NULL
 ---
@@ -26,6 +26,8 @@ quiet_library(H5weaver)
 quiet_library(ggplot2)
 quiet_library(uwot)
 
+pals.alphabet.colors <- c("#F0A0FF","#0075DC","#993F00","#4C005C","#191919","#005C31","#2BCE48","#FFCC99","#808080","#94FFB5","#8F7C00","#9DCC00","#C20088","#003380","#FFA405","#FFA8BB","#426600","#FF0010","#5EF1F2","#00998F","#E0FF66","#740AFF","#990000","#FFFF80","#FFE100","#FF5005")
+
 options(stringsAsFactors = FALSE)
 ```
 
@@ -36,26 +38,26 @@ stm("Starting Seurat PBMC Label Transfer")
 
 Argument parsing
 ```{r Parse arguments}
-if(is.null(params$in_file)) {
-  in_file <- system.file("testdata/pbmc_1k_v3.h5", 
+if(is.null(params$in_h5)) {
+  in_h5 <- system.file("testdata/pbmc_1k_v3.h5", 
                          package = "SeuratLabeler")
   out_h5 <- tempfile(fileext = ".h5")
   out_tbl <- tempfile(fileext = ".csv.gz")
 
 } else {
-  in_file <- params$in_file
+  in_h5 <- params$in_h5
   out_h5 <- params$out_h5
   out_tbl <- params$out_tbl
 }
 
-stm(paste0("IN  H5 file         : ", in_file))
+stm(paste0("IN  H5 file         : ", in_h5))
 stm(paste0("OUT H5 file         : ", out_h5))
 stm(paste0("OUT Cell Label Table: ", out_tbl))
 ```
 
 ```{r Print Arguments}
 print(c(
-  paste0("IN  H5 file         : ", in_file),
+  paste0("IN  H5 file         : ", in_h5),
   paste0("OUT H5 file         : ", out_h5),
   paste0("OUT Cell Label Table: ", out_tbl)
 ))
@@ -70,8 +72,8 @@ reference_so <- variable_pbmc_10k_v3
 
 Load Query Dataset
 ```{r Load Query}
-stm(paste("Loading query from", in_file))
-query_data <- read_h5_dgCMatrix(in_file,
+stm(paste("Loading query from", in_h5))
+query_data <- read_h5_dgCMatrix(in_h5,
                                 feature_names = "name")
 query_so <- CreateSeuratObject(counts = query_data)
 ```
@@ -139,7 +141,7 @@ Plot genes vs scores
 plot_df <- label_results
 
 plot_colors <- data.frame(seurat_pbmc_type = unique(plot_df$seurat_pbmc_type))
-plot_colors$seurat_pbmc_type_color <- pals::alphabet(n = nrow(plot_colors))
+plot_colors$seurat_pbmc_type_color <- pals.alphabet.colors[1:nrow(plot_colors)]
 
 ggplot() +
   geom_point(data = plot_df,
@@ -155,14 +157,39 @@ Run PCA
 ```{r Run PCA}
 stm("Running PCA and Jack Straw")
 
+sample_cells <- function(cl, 
+                          sample.size, 
+                          seed = 3030) {
+  cl.cells <- split(names(cl), cl)
+  sampled.cells <- sapply(names(cl.cells), function(x) {
+    cells <- cl.cells[[x]]
+    if (sample.size >= length(cells)) {
+      return(cells)
+    }
+    to.sample <- pmin(sample.size, length(cells))
+    
+    set.seed(seed)
+    sample(cells, to.sample)
+  }, simplify = FALSE)
+  sampled.cells <- unlist(sampled.cells)
+  return(sampled.cells)
+}
+
 query_so <- FindVariableFeatures(object = query_so)
 query_so <- ScaleData(object = query_so)
 query_so <- RunPCA(object = query_so, npcs = 50)
 
-query_so <- JackStraw(object = query_so, dims = 50)
-query_so <- ScoreJackStraw(object = query_so, dims = 1:50)
+jackstraw_cells <- sample_cells(query_so$predicted.id, 100)
+jackstraw_so <- query_so[,jackstraw_cells]
 
-pc_pvals <- query_so@reductions$pca@jackstraw$overall.p.values[,2]
+jackstraw_so <- JackStraw(object = jackstraw_so, 
+                          dims = 50, 
+                          num.replicate = 50, 
+                          verbose = FALSE)
+jackstraw_so <- ScoreJackStraw(object = jackstraw_so, 
+                               dims = 1:50)
+
+pc_pvals <- jackstraw_so@reductions$pca@jackstraw$overall.p.values[,2]
 good_pcs <- pc_pvals < 0.05
 
 pc_embeddings <- query_so@reductions$pca@cell.embeddings
@@ -228,7 +255,7 @@ PCA results are stored in "/pca/"
 ```{r Add results to list object}
 stm("Adding results to input data")
 
-h5_list <- rhdf5::h5dump(in_file)
+h5_list <- rhdf5::h5dump(in_h5)
 
 if(!"observations" %in% names(h5_list$matrix)) {
   h5_list$matrix$observations <- list()
