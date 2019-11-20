@@ -48,6 +48,10 @@ if(is.null(params$in_h5)) {
   in_h5 <- params$in_h5
   out_h5 <- params$out_h5
   out_tbl <- params$out_tbl
+  
+  if(is.null(out_tbl)) {
+    out_tbl <- "Not Used"
+  }
 }
 
 stm(paste0("IN  H5 file         : ", in_h5))
@@ -129,11 +133,13 @@ label_results <- data.frame(cell_barcode = names(query_so$predicted.id),
 
 Write output table:
 ```{r Output Table}
-stm(paste0("Writing results table to ",out_tbl))
-
-write.csv(label_results,
-          file = out_tbl,
-          row.names = FALSE)
+if(out_tbl != "Not Used") {
+  stm(paste0("Writing results table to ",out_tbl))
+  
+  write.csv(label_results,
+            file = out_tbl,
+            row.names = FALSE)
+}
 ```
 
 Plot genes vs scores
@@ -264,8 +270,8 @@ if(!"observations" %in% names(h5_list$matrix)) {
 h5_list$matrix$observations$seurat_pbmc_type <- label_results$seurat_pbmc_type[match(h5_list$matrix$barcodes, label_results$cell_barcode)]
 h5_list$matrix$observations$seurat_pbmc_type_score <- label_results$seurat_pbmc_type_score[match(h5_list$matrix$barcodes, label_results$cell_barcode)]
 
-h5_list$umap <- list(umap_1 = plot_df$umap1[match(h5_list$matrix$barcodes, plot_df$cell_barcode)],
-                     umap_2 = plot_df$umap2[match(h5_list$matrix$barcodes, plot_df$cell_barcode)])
+h5_list$matrix$observations$umap_1 <- plot_df$umap1[match(h5_list$matrix$barcodes, plot_df$cell_barcode)]
+h5_list$matrix$observations$umap_2 <- plot_df$umap2[match(h5_list$matrix$barcodes, plot_df$cell_barcode)]
 
 h5_list$pca_dgCMatrix <- as(t(pc_embeddings), "dgCMatrix")
 h5_list <- h5_list_convert_from_dgCMatrix(h5_list, target = "pca")
