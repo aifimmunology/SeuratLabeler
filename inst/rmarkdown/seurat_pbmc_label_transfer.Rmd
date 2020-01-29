@@ -12,6 +12,7 @@ params:
   in_h5: NULL
   out_h5: NULL
   out_tbl: NULL
+  allow_few_cells: NULL
 ---
 
 ```{r Load Libraries}
@@ -43,11 +44,12 @@ if(is.null(params$in_h5)) {
                          package = "SeuratLabeler")
   out_h5 <- tempfile(fileext = ".h5")
   out_tbl <- tempfile(fileext = ".csv.gz")
-
+  allow_few_cells <- FALSE
 } else {
   in_h5 <- params$in_h5
   out_h5 <- params$out_h5
   out_tbl <- params$out_tbl
+  allow_few_cells <- params$allow_few_cells
   
   if(is.null(out_tbl)) {
     out_tbl <- "Not Used"
@@ -84,7 +86,7 @@ rownames(query_data) <- as.vector(rhdf5::h5read(in_h5, "/matrix/features/name"))
 
 Low Cell Count Compensation
 ```{r}
-if(ncol(query_data) < 200) {
+if(allow_few_cells & ncol(query_data) < 200) {
   stm("WARNING: < 200 Cells as Input. Attempting compensation")
   stm("WARNING: Labels may be inaccurate")
   
@@ -97,6 +99,9 @@ if(ncol(query_data) < 200) {
     colnames(dup_data) <- paste0("__dup__",i,"_",colnames(dup_data))
     query_data <- cbind(query_data, dup_data)
   }
+} else if (ncol(query_data) < 200) {
+  stm("ERROR: < 200 Cells as Input. Too Few for Labeling")
+  stop("ERROR: < 200 Cells as Input. Too Few for Labeling")
 } else {
   low_cell_comp <- FALSE
 }
