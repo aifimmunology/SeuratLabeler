@@ -49,7 +49,7 @@ if(is.null(params$in_h5)) {
   in_h5 <- params$in_h5
   out_h5 <- params$out_h5
   out_tbl <- params$out_tbl
-  allow_few_cells <- params$allow_few_cells
+  allow_few_cells <- as.logical(params$allow_few_cells)
   
   if(is.null(out_tbl)) {
     out_tbl <- "Not Used"
