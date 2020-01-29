@@ -144,13 +144,11 @@ if(low_cell_comp) {
 }
 ```
 
-
 Print summary table
 ```{r Type Counts}
 label_summary <- as.data.frame(table(query_so$predicted.id))
 names(label_summary) <- c("type_label","n_cells")
 label_summary$frac_cells <- label_summary$n_cells / sum(label_summary$n_cells)
-
 knitr::kable(label_summary, caption = "Type Label Summary")
 ```
 
@@ -184,10 +182,8 @@ if(out_tbl != "Not Used") {
 Plot genes vs scores
 ```{r Plot Genes vs Scores}
 plot_df <- label_results
-
 plot_colors <- data.frame(seurat_pbmc_type = unique(plot_df$seurat_pbmc_type))
 plot_colors$seurat_pbmc_type_color <- pals.alphabet.colors[1:nrow(plot_colors)]
-
 ggplot() +
   geom_point(data = plot_df,
              aes(x = seurat_pbmc_type_score,
@@ -220,19 +216,21 @@ sample_cells <- function(cl,
   return(sampled.cells)
 }
 
+pc_dims <- min(ncol(query_so) - 1, 50)
+
 query_so <- FindVariableFeatures(object = query_so)
 query_so <- ScaleData(object = query_so)
-query_so <- RunPCA(object = query_so, npcs = 50)
+query_so <- RunPCA(object = query_so, npcs = pc_dims)
 
 jackstraw_cells <- sample_cells(query_so$predicted.id, 100)
 jackstraw_so <- query_so[,jackstraw_cells]
 
 jackstraw_so <- JackStraw(object = jackstraw_so, 
-                          dims = 50, 
+                          dims = pc_dims, 
                           num.replicate = 50, 
                           verbose = FALSE)
 jackstraw_so <- ScoreJackStraw(object = jackstraw_so, 
-                               dims = 1:50)
+                               dims = 1:pc_dims)
 
 pc_pvals <- jackstraw_so@reductions$pca@jackstraw$overall.p.values[,2]
 good_pcs <- pc_pvals < 0.05
@@ -247,6 +245,7 @@ stm("Running UMAP projection")
 umap_results <- uwot::umap(pc_embeddings[, good_pcs],
                            min_dist = 0.1)
 ```
+
 
 Remove objects from memory:
 ```{r Remove Seurat Objects}
