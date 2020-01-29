@@ -12,6 +12,7 @@ params:
   in_h5: NULL
   out_h5: NULL
   out_tbl: NULL
+  allow_few_cells: NULL
 ---
 
 ```{r Load Libraries}
@@ -43,11 +44,12 @@ if(is.null(params$in_h5)) {
                          package = "SeuratLabeler")
   out_h5 <- tempfile(fileext = ".h5")
   out_tbl <- tempfile(fileext = ".csv.gz")
-
+  allow_few_cells <- FALSE
 } else {
   in_h5 <- params$in_h5
   out_h5 <- params$out_h5
   out_tbl <- params$out_tbl
+  allow_few_cells <- params$allow_few_cells
   
   if(is.null(out_tbl)) {
     out_tbl <- "Not Used"
@@ -79,6 +81,34 @@ Load Query Dataset
 stm(paste("Loading query from", in_h5))
 query_data <- read_h5_dgCMatrix(in_h5,
                                 feature_names = "name")
+rownames(query_data) <- as.vector(rhdf5::h5read(in_h5, "/matrix/features/name"))
+```
+
+Low Cell Count Compensation
+```{r}
+if(allow_few_cells & ncol(query_data) < 200) {
+  stm("WARNING: < 200 Cells as Input. Attempting compensation")
+  stm("WARNING: Labels may be inaccurate")
+  
+  low_cell_comp <- TRUE
+  
+  ndup <- ceiling(200 / ncol(query_data))
+  
+  for(i in 1:ndup) {
+    dup_data <- query_data
+    colnames(dup_data) <- paste0("__dup__",i,"_",colnames(dup_data))
+    query_data <- cbind(query_data, dup_data)
+  }
+} else if (ncol(query_data) < 200) {
+  stm("ERROR: < 200 Cells as Input. Too Few for Labeling")
+  stop("ERROR: < 200 Cells as Input. Too Few for Labeling")
+} else {
+  low_cell_comp <- FALSE
+}
+```
+
+
+```{r Make Seurat Object}
 query_so <- CreateSeuratObject(counts = query_data)
 ```
 
@@ -107,6 +137,14 @@ query_so <- AddMetaData(object = query_so,
                         metadata = label_predictions)
 ```
 
+Low Cell Count Compensation removal
+```{r}
+if(low_cell_comp) {
+  query_so <- query_so[,!grepl("__dup__", rownames(query_so@meta.data))]
+}
+```
+
+
 Print summary table
 ```{r Type Counts}
 label_summary <- as.data.frame(table(query_so$predicted.id))
@@ -115,6 +153,7 @@ label_summary$frac_cells <- label_summary$n_cells / sum(label_summary$n_cells)
 
 knitr::kable(label_summary, caption = "Type Label Summary")
 ```
+
 Plot score distribution
 ```{r Score Distribution}
 hist(query_so$prediction.score.max,
@@ -299,5 +338,5 @@ time_message <- paste0("Ellapsed Time: ",
                        " ", units(diff_time))
 print(time_message)
 stm(time_message)
-stm("HTO count processing complete.")
+stm("Cell labeling processing complete.")
 ```
