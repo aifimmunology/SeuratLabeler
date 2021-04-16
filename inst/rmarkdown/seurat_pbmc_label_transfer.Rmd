@@ -35,6 +35,8 @@ options(stringsAsFactors = FALSE)
 Declaring start
 ```{r Declare start}
 stm("Starting Seurat PBMC Label Transfer")
+stm(paste0("Using SeuratLabeler v",installed.packages()["SeuratLabeler","Version"]))
+stm(paste0("Using H5weaver v",installed.packages()["H5weaver","Version"]))
 ```
 
 Argument parsing
