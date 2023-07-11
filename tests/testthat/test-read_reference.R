@@ -5,6 +5,7 @@ library(SeuratLabeler)
 # Test input files
 fp_ref_so <- testthat::test_path('testdata','hao2021_pbmc_downsampled.rds')
 fp_ref_h5 <- testthat::test_path('testdata','hao2021_pbmc_downsampled.h5seurat')
+fp_ref_bm_so <- testthat::test_path('testdata','bmcite_downsampled.rds') 
 
 # Make example bad inputs
 my_td <- tempdir()
@@ -36,7 +37,6 @@ testthat::test_that(
     }
 )
 
-fp_ref_h5 <- testthat::test_path('testdata','hao2021_pbmc_downsampled.rds')
 testthat::test_that(
     'read_reference succeeds for h5seurat reference file type', 
     {
@@ -55,6 +55,18 @@ testthat::test_that(
         testthat::expect_error(
             so_ref <- read_reference(fp_bad_data),
             regexp = "Input reference RDS file does not contain a Seurat object",
+        )
+    }
+)
+
+testthat::test_that(
+    'read_reference succeeds for example bm reference file', 
+    {
+        testthat::expect_true(
+            {
+                so_ref <- read_reference(fp_ref_bm_so);
+                inherits(so_ref, "Seurat")
+            }
         )
     }
 )
