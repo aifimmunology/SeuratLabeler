@@ -93,3 +93,13 @@ saveRDS(bm_small, file = './testdata/bmcite_downsampled.rds')
 
 # Save h5 Seurat
 SeuratDisk::SaveH5Seurat(bm_small, filename = './testdata/bmcite_downsampled.h5seurat')
+
+# Copy of small BM data
+inst_data <- SeuratData::InstalledData()
+if(!("hcabm40k" %in% inst_data$Dataset)) {
+    SeuratData::InstallData('hcabm40k')
+}
+SeuratData::LoadData(ds = 'hcabm40k')
+DefaultAssay(hcabm40k) <- 'RNA'
+hcabm40k_BM1 <- subset(hcabm40k, idents = 'MantonBM1')
+saveRDS(hcabm40k_BM1, './testdata/bm_hcabm40k_downsampled.rds')
